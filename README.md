@@ -1,7 +1,7 @@
 #  Neon Sudoku
 
 <p align="center">
-  <img src="Neon Sudoku Poster.png" alt="Neon Sudoku Poster" width="700">
+  <img src="Neon Sudoku Poster.jpg" alt="Neon Sudoku Poster" width="700">
 </p>
 
 Dare to Complete the GRID!
