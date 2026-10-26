@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Neon Sudoku</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      touch-action: manipulation;  <!-- No double tap to zoom. -->
+    }
+    body {
+      background-color: #0d0e15;
+      color: #fff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      overflow-x: hidden;
+    }
+    .container {
+      text-align: center;
+      width: 100%;
+      max-width: 460px;
+      padding: 15px;
+      position: relative;   <!-- ... to the background -->
+      z-index: 1;           <!-- Make it sit on top of background elements -->
+    }
+    h1 {
+      color: #00e5ff;
+      text-shadow: 0 0 12px #00e5ff;
+      margin: 0 0 5px 0;
+      font-size: clamp(1.8rem, 5vw, 2.4rem);
+      letter-spacing: 2px;
+    }
+
+    /* Scoreboard & Mistakes Banner */
+    .status-banner {
+      display: flex;
+      justify-content: space-around;
+      font-size: 1rem;
+      font-weight: bold;
+      margin-bottom: 12px;
+    }
+    .score-val { color: #00ff88; text-shadow: 0 0 8px #00ff88; }
+    .mistakes-val { color: #ff1744; text-shadow: 0 0 8px #ff1744; }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    select, button {
+      background: #161925;
+      color: #00e5ff;
+      border: 2px solid #00e5ff;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.25s ease;
+      box-shadow: 0 0 8px rgba(0, 229, 255, 0.2);
+    }
+    select:hover, button:hover {
+      background: #00e5ff;
+      color: #000;
+      box-shadow: 0 0 18px #00e5ff;
+    }
+
+    /* Main Sudoku grid style */
+    .board {
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      grid-template-rows: repeat(9, 1fr);
+      gap: 2px;
+      background-color: #1a1d2e;
+      padding: 6px;
+      border-radius: 10px;
+      box-shadow: 0 0 25px rgba(0, 229, 255, 0.25);
+      margin: 0 auto;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      box-sizing: border-box;
+    }
+
+    .cell {
+      width: 100%;
+      height: 100%;
+      background-color: #121420;
+      border: none;
+      text-align: center;
+      font-size: clamp(16px, 5vw, 22px);
+      font-weight: bold;
+      color: #fff;
+      transition: all 0.15s ease-in-out;
+      border-radius: 2px;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    /* 3x3 Borders for the Grid */
+    .cell:nth-child(3n) { border-right: 2px solid #00e5ff; }
+    .cell:nth-child(9n) { border-right: none; }
+    .cell:nth-child(n+19):nth-child(-n+27),
+    .cell:nth-child(n+46):nth-child(-n+54) { border-bottom: 2px solid #00e5ff; }
+
+    /* Highlights & Focus */
+    .cell:focus {
+      outline: none;
+      background-color: #242940;
+      transform: scale(1.12);
+      box-shadow: 0 0 15px #00e5ff;
+      z-index: 10;
+    }
+    .highlight { background-color: #1c2738; }
+    .fixed { color: #00e5ff; opacity: 0.8; pointer-events: none; }
+
+    /* Digit Tracker & Keyboard */
+    .tracker-panel {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin-top: 15px;
+    }
+    .num-btn {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 0;
+      font-size: 16px;
+    }
+    .num-btn span.count {
+      font-size: 10px;
+      opacity: 0.7;
+    }
+    .num-btn.completed {
+      background: #00ff88 !important;
+      color: #000 !important;
+      border-color: #00ff88 !important;
+      box-shadow: 0 0 12px #00ff88 !important;
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    /* Animations (Errors and Wins/Losses) */
+    .error {
+      color: #ff1744 !important;
+      animation: shake 0.3s cubic-bezier(.36,.07,.19,.97) both;
+      text-shadow: 0 0 10px #ff1744;
+    }
+    .win-pulse { animation: glowWin 1s infinite alternate; }
+
+    @keyframes shake {
+      10%, 90% { transform: translateX(-2px); }            <!-- Moves element slightly left at 10% and 90% of animation -->
+      20%, 80% { transform: translateX(3px); }
+      30%, 50%, 70% { transform: translateX(-5px); }
+      40%, 60% { transform: translateX(5px); }
+    }
+    @keyframes glowWin {
+      from { box-shadow: 0 0 10px #00e5ff; }                  <!-- Starts the animation with a cyan shadow -->
+      to { box-shadow: 0 0 25px #00ff88, 0 0 40px #00ff88; }  <!-- Ends the animation with a double-layered green shadow -->
+    }
+
+    /* Win/Game Over Screen */
+    .overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;  <!-- Cover the entire screen -->
+      background: rgba(13, 14, 21, 0.85);
+      backdrop-filter: blur(5px);
+      z-index: 100;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+    }
+    .overlay-content {
+      background: #161925;
+      padding: 30px 40px;
+      border-radius: 12px;
+      border: 2px solid;
+      text-align: center;
+      animation: popIn 0.3s ease-out;
+      max-width: 90%;
+    }
+    .overlay-win { border-color: #00ff88; box-shadow: 0 0 30px rgba(0, 255, 136, 0.4); }
+    .overlay-win h2 { color: #00ff88; text-shadow: 0 0 10px #00ff88; }
+    .overlay-lose { border-color: #ff1744; box-shadow: 0 0 30px rgba(255, 23, 68, 0.4); }
+    .overlay-lose h2 { color: #ff1744; text-shadow: 0 0 10px #ff1744; }
+
+    @keyframes popIn {
+      0% { transform: scale(0.8); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>Neon Sudoku</h1>
+
+    <div class="status-banner">
+      <div class="score-val">Score: <span id="score-val">0</span></div>
+      <div class="mistakes-val">Mistakes: <span id="mistakes-val">0/3</span></div>
+    </div>
+
+    <div class="controls">
+      <select id="difficulty">
+        <option value="35">Easy</option>
+        <option value="28" selected>Medium</option>
+        <option value="22">Hard</option>
+      </select>
+      <button id="new-game-btn">New Game</button>
+    </div>
+
+    <div id="sudoku-board" class="board"></div>
+    <div class="tracker-panel" id="tracker-panel"></div>
+  </div>
+
+  <div id="modal-overlay" class="overlay">
+    <div id="modal-content" class="overlay-content">
+      <h2 id="modal-title">VICTORY</h2>
+      <p id="modal-desc">Board completed successfully!</p>
+      <button onclick="closeModal()">Play Again</button>
+    </div>
+  </div>
+
+  <script>
+    const boardElement = document.getElementById('sudoku-board');
+    const trackerElement = document.getElementById('tracker-panel');
+    const scoreValElement = document.getElementById('score-val');
+    const mistakesValElement = document.getElementById('mistakes-val');
+    const modalOverlay = document.getElementById('modal-overlay');
+    const modalContent = document.getElementById('modal-content');
+    const modalTitle = document.getElementById('modal-title');
+    const modalDesc = document.getElementById('modal-desc');
+    const cells = [];
+
+    const MAX_MISTAKES = 3;
+    let currentSolution = [];
+    let currentPuzzle = [];
+    let activeCell = null;
+    let score = 0;
+    let mistakes = 0;
+    let isGameOver = false;
+
+    // --- GENERATOR ENGINE ---
+    function generateSudoku(clueCount) {
+      let board = Array(81).fill(0);
+      while (!solveSudokuFast(board)) { board = Array(81).fill(0); }
+
+      currentSolution = [...board];
+      currentPuzzle = [...currentSolution];
+
+      let removeCount = 81 - clueCount;
+      while (removeCount > 0) {
+        let idx = Math.floor(Math.random() * 81);
+        if (currentPuzzle[idx] !== 0) {
+          currentPuzzle[idx] = 0;
+          removeCount--;
+        }
+      }
+    }
+
+    function isValid(board, row, col, num) {  <!-- Checking if 'num' can go into [row, col] -->
+      for (let i = 0; i < 9; i++) {
+        const m = 3 * Math.floor(row / 3) + Math.floor(i / 3);
+        const n = 3 * Math.floor(col / 3) + i % 3;
+        if (board[row * 9 + i] === num || board[i * 9 + col] === num || board[m * 9 + n] === num) { <!-- Checking for conflicts -->
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function solveSudokuFast(board) {   <!-- Pre-solving and generating the board Sudoku -->
+      for (let i = 0; i < 81; i++) {
+        if (board[i] === 0) {
+          let row = Math.floor(i / 9);
+          let col = i % 9;
+          let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9].sort(() => Math.random() - 0.5);  <!-- Creates an array of 1-9 and randomly shuffles it -->
+          for (let num of nums) {
+            if (isValid(board, row, col, num)) {
+              board[i] = num;
+              if (solveSudokuFast(board)) return true;
+              board[i] = 0;
+            }
+          }
+          return false;
+        }
+      }
+      return true;
+    }
+
+    // --- GAME ENGINE ---
+    function startNewGame() {
+      const clues = parseInt(document.getElementById('difficulty').value);
+      generateSudoku(clues);
+
+      score = 0;
+      mistakes = 0;
+      isGameOver = false;
+
+      updateScore(0);
+      updateMistakes(0);
+
+      boardElement.innerHTML = '';
+      boardElement.classList.remove('win-pulse');
+      cells.length = 0;
+      activeCell = null;
+
+      currentPuzzle.forEach((val, index) => {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.inputMode = 'none';
+        input.maxLength = 1;
+        input.className = 'cell';
+        input.dataset.index = index;
+
+        if (val !== 0) {      <!-- Clues -->
+          input.value = val;
+          input.classList.add('fixed');
+          input.readOnly = true;
+        }
+
+        input.addEventListener('focus', (e) => {
+          if (isGameOver) return;
+          activeCell = e.target;
+          highlightCrosshair(index);
+        });
+
+        input.addEventListener('input', (e) => handleInput(e.target, index));
+
+        boardElement.appendChild(input);
+        cells.push(input);
+      });
+
+      renderTracker();
+    }
+
+    function updateScore(pts) {
+      score = Math.max(0, score + pts);
+      scoreValElement.innerText = score;
+    }
+
+    function updateMistakes(amt) {
+      mistakes += amt;
+      mistakesValElement.innerText = `${mistakes}/${MAX_MISTAKES}`;
+
+      if (mistakes >= MAX_MISTAKES) {
+        triggerGameOver();
+      }
+    }
+
+    function renderTracker() {
+      trackerElement.innerHTML = '';
+
+      const counts = Array(10).fill(0);
+      cells.forEach((cell, i) => {
+        const val = parseInt(cell.value);
+        if (!isNaN(val) && val === currentSolution[i]) {
+          counts[val]++;
+        }
+      });
+
+      for (let d = 1; d <= 9; d++) {              <!-- Tracker buttons -->
+        const btn = document.createElement('button');
+        btn.className = 'num-btn';
+        if (counts[d] === 9) btn.classList.add('completed');
+
+        btn.innerHTML = `${d} <span class="count">${counts[d]}/9</span>`;
+        btn.onmousedown = (e) => {
+          e.preventDefault();
+          typeNum(d);
+        };
+        trackerElement.appendChild(btn);
+      }
+
+      const clearBtn = document.createElement('button');
+      clearBtn.className = 'num-btn';
+      clearBtn.innerHTML = `X <span class="count">Erase</span>`;
+      clearBtn.onmousedown = (e) => {
+        e.preventDefault();
+        typeNum('');
+      };
+      trackerElement.appendChild(clearBtn);
+    }
+
+    function typeNum(val) {
+      if (!activeCell || activeCell.classList.contains('fixed') || isGameOver) return;
+      activeCell.value = val;
+      handleInput(activeCell, parseInt(activeCell.dataset.index));
+    }
+
+    function highlightCrosshair(index) {
+      cells.forEach(cell => cell.classList.remove('highlight'));
+      const row = Math.floor(index / 9);
+      const col = index % 9;
+
+      cells.forEach((cell, i) => {
+        const r = Math.floor(i / 9);
+        const c = i % 9;
+        if (r === row || c === col) cell.classList.add('highlight');
+      });
+    }
+
+    function handleInput(input, index) {
+      if (isGameOver) return;
+      input.classList.remove('error');
+      const val = parseInt(input.value);
+
+      if (isNaN(val)) {
+        input.value = '';
+        renderTracker();
+        return;
+      }
+
+      // Validate against solution
+      if (val === currentSolution[index]) {
+        updateScore(100);
+        checkAutoWin();
+      } else {
+        updateScore(-25);
+        updateMistakes(1);
+        input.classList.add('error');
+        setTimeout(() => input.classList.remove('error'), 300);
+      }
+
+      renderTracker();
+    }
+
+    // Checks for complete board after every valid entry
+    function checkAutoWin() {
+      const isComplete = cells.every((cell, i) => {
+        return parseInt(cell.value) === currentSolution[i];
+      });
+
+      if (isComplete) {
+        isGameOver = true;
+        boardElement.classList.add('win-pulse');
+        showModal('VICTORY', `Board Cleared! Final Score: ${score}`, true);
+      }
+    }
+
+    function triggerGameOver() {
+      isGameOver = true;
+      cells.forEach(cell => cell.readOnly = true);
+      showModal('GAME OVER', 'Too many mistakes! Try again.', false);
+    }
+
+    function showModal(title, desc, isWin) {
+      modalTitle.innerText = title;
+      modalDesc.innerText = desc;
+      modalContent.className = 'overlay-content ' + (isWin ? 'overlay-win' : 'overlay-lose');
+      modalOverlay.style.display = 'flex';
+    }
+
+    function closeModal() {
+      modalOverlay.style.display = 'none';
+      startNewGame();
+    }
+
+    document.getElementById('new-game-btn').addEventListener('click', startNewGame);
+
+    startNewGame();
+  </script>
+</body>
+</html>
